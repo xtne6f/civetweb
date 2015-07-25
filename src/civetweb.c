@@ -8707,6 +8707,8 @@ check_authorization(struct mg_connection *conn, const char *path)
 	if (is_file_opened(&file.access)) {
 		authorized = authorize(conn, &file, NULL);
 		(void)mg_fclose(&file.access); /* ignore error on read only file */
+	} else if (conn->dom_ctx->config[GLOBAL_PASSWORDS_FILE] != NULL) {
+		authorized = 0;
 	}
 
 	return authorized;
