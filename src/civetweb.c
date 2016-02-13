@@ -19452,32 +19452,41 @@ free_context(struct mg_context *ctx)
 void
 mg_stop(struct mg_context *ctx)
 {
+	/* Wait until everything has stopped. */
+	while (!mg_check_stop(ctx)) {
+		(void)mg_sleep(10);
+	}
+}
+
+
+int
+mg_check_stop(struct mg_context *ctx)
+{
 	pthread_t mt;
 	if (!ctx) {
-		return;
+		return 1;
 	}
 
 	/* We don't use a lock here. Calling mg_stop with the same ctx from
 	 * two threads is not allowed. */
 	mt = ctx->masterthreadid;
 	if (mt == 0) {
-		return;
+		return 1;
 	}
 
-	ctx->masterthreadid = 0;
+	if (STOP_FLAG_IS_ZERO(&ctx->stop_flag)) {
+		/* Set stop flag, so all threads know they have to exit. */
+		STOP_FLAG_ASSIGN(&ctx->stop_flag, 1);
 
-	/* Set stop flag, so all threads know they have to exit. */
-	STOP_FLAG_ASSIGN(&ctx->stop_flag, 1);
-
-	/* Join timer thread */
+		/* Join timer thread */
 #if defined(USE_TIMERS)
-	timers_exit(ctx);
+		timers_exit(ctx);
 #endif
-
-	/* Wait until everything has stopped. */
-	while (!STOP_FLAG_IS_TWO(&ctx->stop_flag)) {
-		(void)mg_sleep(10);
 	}
+	if (!STOP_FLAG_IS_TWO(&ctx->stop_flag)) {
+		return 0;
+	}
+	ctx->masterthreadid = 0;
 
 	/* Wait to stop master thread */
 	mg_join_thread(mt);
@@ -19489,6 +19498,8 @@ mg_stop(struct mg_context *ctx)
 
 	/* Free memory */
 	free_context(ctx);
+
+	return 1;
 }
 
 
