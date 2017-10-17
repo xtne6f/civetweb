@@ -1063,6 +1063,7 @@ CIVETWEB_API const char *mg_get_header(const struct mg_connection *,
                                        const char *name);
 
 
+#if defined(MG_CLIENT_UTIL)
 /* Get a value of particular form variable.
 
    Parameters:
@@ -1308,6 +1309,7 @@ enum {
  * no longer required. */
 CIVETWEB_API int mg_handle_form_request(struct mg_connection *conn,
                                         struct mg_form_data_handler *fdh);
+#endif /* MG_CLIENT_UTIL */
 
 
 /* Convenience function -- create detached thread.
@@ -1425,6 +1427,7 @@ CIVETWEB_API int mg_strcasecmp(const char *s1, const char *s2);
 CIVETWEB_API int mg_strncasecmp(const char *s1, const char *s2, size_t len);
 
 
+#if defined(MG_CLIENT_UTIL)
 /* Connect to a websocket as a client
    Parameters:
      host: host to connect to, i.e. "echo.websocket.org" or "192.168.1.1" or
@@ -1547,6 +1550,7 @@ CIVETWEB_API int mg_get_response(struct mg_connection *conn,
                                  char *ebuf,
                                  size_t ebuf_len,
                                  int timeout);
+#endif /* MG_CLIENT_UTIL */
 
 
 /* mg_response_header_* functions can be used from server callbacks
@@ -1810,6 +1814,7 @@ struct mg_init_data {
 };
 
 
+#if defined(MG_CLIENT_UTIL)
 #if defined(MG_EXPERIMENTAL_INTERFACES)
 
 CIVETWEB_API struct mg_connection *
@@ -1823,6 +1828,7 @@ mg_connect_client2(const char *host,
 CIVETWEB_API int mg_get_response2(struct mg_connection *conn,
                                   struct mg_error_data *error,
                                   int timeout);
+#endif
 #endif
 
 

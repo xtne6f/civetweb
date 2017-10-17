@@ -7084,6 +7084,7 @@ url_decode_in_place(char *buf)
 }
 
 
+#if defined(MG_CLIENT_UTIL)
 CIVETWEB_API int
 mg_get_var(const char *data,
            size_t data_len,
@@ -7299,6 +7300,7 @@ mg_get_cookie(const char *cookie_header,
 	}
 	return len;
 }
+#endif /* MG_CLIENT_UTIL */
 
 
 CIVETWEB_API int
@@ -10999,6 +11001,7 @@ parse_http_request(char *buf, int len, struct mg_request_info *ri)
 }
 
 
+#if defined(MG_CLIENT_UTIL)
 static int
 parse_http_response(char *buf, int len, struct mg_response_info *ri)
 {
@@ -11098,6 +11101,7 @@ parse_http_response(char *buf, int len, struct mg_response_info *ri)
 
 	return response_length + init_skip;
 }
+#endif /* MG_CLIENT_UTIL */
 
 
 /* Keep reading the input (either opened file descriptor fd, or socket sock,
@@ -14115,8 +14119,10 @@ set_throttle(const char *spec, const union usa *rsa, const char *uri)
 }
 
 
+#if defined(MG_CLIENT_UTIL)
 /* The mg_upload function is superseded by mg_handle_form_request. */
 #include "handle_form.inl"
+#endif
 
 
 static int
@@ -16455,8 +16461,11 @@ static pthread_mutex_t *ssl_mutexes;
 
 static int
 sslize(struct mg_connection *conn,
-       int (*func)(SSL *),
-       const struct mg_client_options *client_options)
+       int (*func)(SSL *)
+#if defined(MG_CLIENT_UTIL)
+       , const struct mg_client_options *client_options
+#endif
+       )
 {
 	int ret, err;
 	int short_trust;
@@ -16497,11 +16506,13 @@ sslize(struct mg_connection *conn,
 		return 0;
 	}
 
+#if defined(MG_CLIENT_UTIL)
 	if (client_options) {
 		if (client_options->host_name) {
 			SSL_set_tlsext_host_name(conn->ssl, client_options->host_name);
 		}
 	}
+#endif
 
 	/* Reuse the request timeout for the SSL_Accept/SSL_connect timeout  */
 	if (conn->dom_ctx->config[REQUEST_TIMEOUT]) {
@@ -17936,6 +17947,7 @@ close_connection(struct mg_connection *conn)
 }
 
 
+#if defined(MG_CLIENT_UTIL)
 CIVETWEB_API void
 mg_close_connection(struct mg_connection *conn)
 {
@@ -18374,6 +18386,7 @@ mg_connect_client2(const char *host,
 	return mg_connect_client_impl(&opts, is_ssl, init, error);
 }
 #endif
+#endif /* MG_CLIENT_UTIL */
 
 
 static const struct {
@@ -18734,6 +18747,7 @@ get_request(struct mg_connection *conn, char *ebuf, size_t ebuf_len, int *err)
 }
 
 
+#if defined(MG_CLIENT_UTIL)
 /* conn is assumed to be valid in this internal function */
 static int
 get_response(struct mg_connection *conn, char *ebuf, size_t ebuf_len, int *err)
@@ -19324,6 +19338,7 @@ mg_connect_websocket_client_secure_extensions(
 	                                        close_func,
 	                                        user_data);
 }
+#endif /* MG_CLIENT_UTIL */
 
 
 /* Prepare connection data structure */
@@ -19825,7 +19840,11 @@ worker_thread_run(struct mg_connection *conn)
 
 #elif !defined(NO_SSL)
 			/* HTTPS connection */
-			if (sslize(conn, SSL_accept, NULL)) {
+			if (sslize(conn, SSL_accept
+#if defined(MG_CLIENT_UTIL)
+			           , NULL
+#endif
+			           )) {
 				/* conn->dom_ctx is set in get_request */
 
 				/* Get SSL client certificate information (if set) */
