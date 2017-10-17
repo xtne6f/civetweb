@@ -333,8 +333,10 @@ show_usage_and_exit(const char *exeName)
 	fprintf(stderr, "  Start server with a set of options:\n");
 	fprintf(stderr, "    %s [config_file]\n", exeName);
 	fprintf(stderr, "    %s [-option value ...]\n", exeName);
+#if defined(MG_CLIENT_UTIL)
 	fprintf(stderr, "  Run as client:\n");
 	fprintf(stderr, "    %s -C url\n", exeName);
+#endif
 	fprintf(stderr, "  Show system information:\n");
 	fprintf(stderr, "    %s -I\n", exeName);
 	fprintf(stderr, "  Add user/change password:\n");
@@ -1138,6 +1140,7 @@ finished:
 #endif
 
 
+#if defined(MG_CLIENT_UTIL)
 static int
 run_client(const char *url_arg)
 {
@@ -1280,6 +1283,7 @@ run_client(const char *url_arg)
 	mg_exit_library();
 	return 1;
 }
+#endif
 
 
 static int
@@ -1363,6 +1367,7 @@ start_civetweb(int argc, char *argv[])
 		         : EXIT_FAILURE);
 	}
 
+#if defined(MG_CLIENT_UTIL)
 	/* Client mode */
 	if (argc > 1 && !strcmp(argv[1], "-C")) {
 		if (argc != 3) {
@@ -1371,6 +1376,7 @@ start_civetweb(int argc, char *argv[])
 
 		exit(run_client(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE);
 	}
+#endif
 
 	/* Call Lua with additional CivetWeb specific Lua functions, if -L option
 	 * is specified */
