@@ -1502,68 +1502,6 @@ lsp_get_option(lua_State *L)
 }
 
 
-static int s_lua_traceLevel = 1;
-static FILE *s_lua_traceFile = NULL;
-static pthread_mutex_t s_lua_traceMutex;
-
-
-/* mg.trace */
-static int
-lsp_trace(lua_State *L)
-{
-	int num_args = lua_gettop(L);
-	int arg_type[8];
-	int trace_level = 0;
-	int firstarg = 1;
-	int i;
-
-	for (i = 0; i < 8; i++) {
-		if (num_args >= (i + 1)) {
-			arg_type[i] = lua_type(L, (i + 1));
-		} else {
-			arg_type[i] = LUA_TNIL;
-		}
-	}
-
-	if (arg_type[0] == LUA_TNUMBER) {
-		trace_level = (int)lua_tointeger(L, 1);
-		if (num_args == 1) {
-			/* Set a new trace level, return the current one. */
-			lua_pushinteger(L, s_lua_traceLevel);
-			s_lua_traceLevel = trace_level;
-			if (s_lua_traceFile) {
-				pthread_mutex_lock(&s_lua_traceMutex);
-				fflush(s_lua_traceFile);
-				pthread_mutex_unlock(&s_lua_traceMutex);
-			}
-			return 1;
-		}
-		firstarg = 2;
-	}
-
-	if (trace_level > s_lua_traceLevel) {
-		/* If this trace request has a higher trace level than the global trace
-		 * level, do not trace. */
-		lua_pushboolean(L, 0);
-		return 1;
-	}
-
-	/* Print to file */
-	if (s_lua_traceFile) {
-		pthread_mutex_lock(&s_lua_traceMutex);
-		for (i = firstarg; i <= num_args; i++) {
-			if (arg_type[i - 1] == LUA_TSTRING) {
-				const char *arg = lua_tostring(L, i);
-				fprintf(s_lua_traceFile, "%s\n", arg);
-			}
-		}
-		pthread_mutex_unlock(&s_lua_traceMutex);
-	}
-	lua_pushboolean(L, 1);
-	return 1;
-}
-
-
 /* UUID library and function pointer */
 union {
 	void *p;
@@ -2707,7 +2645,6 @@ prepare_lua_environment(struct mg_context *ctx,
 	reg_function(L, "get_response_code_text", lsp_get_response_code_text);
 	reg_function(L, "random", lsp_random);
 	reg_function(L, "get_info", lsp_get_info);
-	reg_function(L, "trace", lsp_trace);
 
 	if (pf_uuid_generate.f) {
 		reg_function(L, "uuid", lsp_uuid);
@@ -3444,9 +3381,6 @@ static void *lib_handle_uuid = NULL;
 static void
 lua_init_optional_libraries(void)
 {
-	/* Create logging mutex */
-	pthread_mutex_init(&s_lua_traceMutex, &pthread_mutex_attr);
-
 	/* shared Lua state */
 	lua_shared_init();
 
@@ -3475,9 +3409,6 @@ lua_exit_optional_libraries(void)
 
 	/* shared Lua state */
 	lua_shared_exit();
-
-	/* Delete logging mutex */
-	pthread_mutex_destroy(&s_lua_traceMutex);
 }
 
 
