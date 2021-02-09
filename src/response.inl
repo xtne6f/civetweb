@@ -7,11 +7,6 @@
  * This file is part of the CivetWeb project.
  */
 
-#if defined(NO_RESPONSE_BUFFERING) && defined(USE_HTTP2)
-#error "HTTP2 currently works only if NO_RESPONSE_BUFFERING is not set"
-#endif
-
-
 /* Internal function to free header list */
 static void
 free_buffered_response_header_list(struct mg_connection *conn)
@@ -231,11 +226,6 @@ mg_response_header_add_lines(struct mg_connection *conn,
 }
 
 
-#if defined USE_HTTP2
-static int http2_send_response_headers(struct mg_connection *conn);
-#endif
-
-
 /* Send http response
  * Parameters:
  *   conn: Current connection handle.
@@ -272,15 +262,6 @@ mg_response_header_send(struct mg_connection *conn)
 	conn->request_state = 2;
 
 #if !defined(NO_RESPONSE_BUFFERING)
-	if (conn->protocol_type == PROTOCOL_TYPE_HTTP2) {
-#if defined USE_HTTP2
-		int ret = http2_send_response_headers(conn);
-		return ret ? 0 : 0; /* todo */
-#else
-		return -2;
-#endif
-	}
-
 	/* Send */
 	send_http1_response_status_line(conn);
 	for (i = 0; i < conn->response_info.num_headers; i++) {

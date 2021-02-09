@@ -1732,7 +1732,6 @@ struct mg_workerTLS {
 	HANDLE pthread_cond_helper_mutex;
 	struct mg_workerTLS *next_waiting_thread;
 #endif
-	const char *alpn_proto;
 #if defined(MG_ALLOW_USING_GET_REQUEST_INFO_FOR_RESPONSE)
 	char txtbuf[4];
 #endif
@@ -2383,9 +2382,6 @@ enum {
 	LUA_BACKGROUND_SCRIPT,
 	LUA_BACKGROUND_SCRIPT_PARAMS,
 #endif
-#if defined(USE_HTTP2)
-	ENABLE_HTTP2,
-#endif
 
 	/* Once for each domain */
 	DOCUMENT_ROOT,
@@ -2502,9 +2498,6 @@ static const struct mg_option config_options[] = {
     {"lua_background_script", MG_CONFIG_TYPE_FILE, NULL},
     {"lua_background_script_params", MG_CONFIG_TYPE_STRING_LIST, NULL},
 #endif
-#if defined(USE_HTTP2)
-    {"enable_http2", MG_CONFIG_TYPE_BOOLEAN, "no"},
-#endif
 
     /* Once for each domain */
     {"document_root", MG_CONFIG_TYPE_DIRECTORY, NULL},
@@ -2553,16 +2546,7 @@ static const struct mg_option config_options[] = {
     {"ssl_verify_depth", MG_CONFIG_TYPE_NUMBER, "9"},
     {"ssl_default_verify_paths", MG_CONFIG_TYPE_BOOLEAN, "yes"},
     {"ssl_cipher_list", MG_CONFIG_TYPE_STRING, NULL},
-
-#if defined(USE_HTTP2)
-    /* HTTP2 requires ALPN, and anyway TLS1.2 should be considered
-     * as a minimum in 2020 */
-    {"ssl_protocol_version", MG_CONFIG_TYPE_NUMBER, "4"},
-#else
-    /* Keep the default (compatibility) */
     {"ssl_protocol_version", MG_CONFIG_TYPE_NUMBER, "0"},
-#endif /* defined(USE_HTTP2) */
-
     {"ssl_short_trust", MG_CONFIG_TYPE_BOOLEAN, "no"},
 
 #if defined(USE_LUA)
@@ -2833,32 +2817,14 @@ enum {
 
 enum {
 	PROTOCOL_TYPE_HTTP1 = 0,
-	PROTOCOL_TYPE_WEBSOCKET = 1,
-	PROTOCOL_TYPE_HTTP2 = 2
+	PROTOCOL_TYPE_WEBSOCKET = 1
 };
-
-
-#if defined(USE_HTTP2)
-#if !defined(HTTP2_DYN_TABLE_SIZE)
-#define HTTP2_DYN_TABLE_SIZE (256)
-#endif
-
-struct mg_http2_connection {
-	uint32_t stream_id;
-	uint32_t dyn_table_size;
-	struct mg_header dyn_table[HTTP2_DYN_TABLE_SIZE];
-};
-#endif
-
 
 struct mg_connection {
 	int connection_type; /* see CONNECTION_TYPE_* above */
-	int protocol_type;   /* see PROTOCOL_TYPE_*: 0=http/1.x, 1=ws, 2=http/2 */
+	int protocol_type;   /* see PROTOCOL_TYPE_*: 0=http/1.x, 1=ws */
 	int request_state;   /* 0: nothing sent, 1: header partially sent, 2: header
 	                        fully sent */
-#if defined(USE_HTTP2)
-	struct mg_http2_connection http2;
-#endif
 
 	struct mg_request_info request_info;
 	struct mg_response_info response_info;
@@ -6807,25 +6773,6 @@ mg_read_inner(struct mg_connection *conn, void *buf, size_t len)
 static void handle_request(struct mg_connection *);
 
 
-#if defined(USE_HTTP2)
-#if defined(NO_SSL)
-#error "HTTP2 requires ALPN, APLN requires SSL/TLS"
-#endif
-#define USE_ALPN
-#include "mod_http2.inl"
-/* Not supported with HTTP/2 */
-#define HTTP1_only                                                             \
-	{                                                                          \
-		if (conn->protocol_type == PROTOCOL_TYPE_HTTP2) {                      \
-			http2_must_use_http1(conn);                                        \
-			return;                                                            \
-		}                                                                      \
-	}
-#else
-#define HTTP1_only
-#endif
-
-
 int
 mg_read(struct mg_connection *conn, void *buf, size_t len)
 {
@@ -6949,11 +6896,6 @@ mg_write(struct mg_connection *conn, const void *buf, size_t len)
 
 	/* Mark connection as "data sent" */
 	conn->request_state = 10;
-#if defined(USE_HTTP2)
-	if (conn->protocol_type == PROTOCOL_TYPE_HTTP2) {
-		http2_data_frame_head(conn, len, 0);
-	}
-#endif
 
 	if (conn->throttle > 0) {
 		if ((now = time(NULL)) != conn->last_throttle_time) {
@@ -13313,7 +13255,6 @@ handle_websocket_request(struct mg_connection *conn,
 /* Is upgrade request:
  *   0 = regular HTTP/1.0 or HTTP/1.1 request
  *   1 = upgrade to websocket
- *   2 = upgrade to HTTP/2
  * -1 = upgrade to unknown protocol
  */
 static int
@@ -13350,9 +13291,6 @@ should_switch_to_protocol(const struct mg_connection *conn)
 		 * request). It will fail later in handle_websocket_request.
 		 */
 		return PROTOCOL_TYPE_WEBSOCKET; /* Websocket */
-	}
-	if (0 != mg_strcasestr(upgrade, "h2")) {
-		return PROTOCOL_TYPE_HTTP2; /* Websocket */
 	}
 
 	/* Upgrade to another protocol */
@@ -14260,10 +14198,6 @@ handle_request(struct mg_connection *conn)
 	handler_type = REQUEST_HANDLER;
 #endif /* defined(USE_WEBSOCKET) */
 
-	if (is_websocket_request) {
-		HTTP1_only;
-	}
-
 	/* 5.2. check if the request will be handled by a callback */
 	if (get_request_handler(conn,
 	                        handler_type,
@@ -14318,7 +14252,6 @@ handle_request(struct mg_connection *conn)
 		}
 	} else if (is_put_or_delete_request && !is_script_resource
 	           && !is_callback_resource) {
-		HTTP1_only;
 /* 6.2. this request is a PUT/DELETE to a real file */
 /* 6.2.1. thus, the server must have real files */
 #if defined(NO_FILES)
@@ -14359,7 +14292,6 @@ handle_request(struct mg_connection *conn)
 
 	/* 7. check if there are request handlers for this uri */
 	if (is_callback_resource) {
-		HTTP1_only;
 		if (!is_websocket_request) {
 			i = callback_handler(conn, callback_data);
 
@@ -14435,7 +14367,6 @@ handle_request(struct mg_connection *conn)
 /* 8. handle websocket requests */
 #if defined(USE_WEBSOCKET)
 	if (is_websocket_request) {
-		HTTP1_only;
 		if (is_script_resource) {
 
 			if (is_in_script_path(conn, path)) {
@@ -14476,14 +14407,12 @@ handle_request(struct mg_connection *conn)
 
 	/* 10. Request is handled by a script */
 	if (is_script_resource) {
-		HTTP1_only;
 		handle_file_based_request(conn, path, &file);
 		return;
 	}
 
 	/* 11. Handle put/delete/mkcol requests */
 	if (is_put_or_delete_request) {
-		HTTP1_only;
 		/* 11.1. PUT method */
 		if (!strcmp(ri->request_method, "PUT")) {
 			put_file(conn, path);
@@ -14578,7 +14507,6 @@ handle_request(struct mg_connection *conn)
 
 	/* 15. Files with search/replace patterns: LSP and SSI */
 	if (is_template_text_file) {
-		HTTP1_only;
 		handle_file_based_request(conn, path, &file);
 		return;
 	}
@@ -16173,110 +16101,6 @@ ssl_servername_callback(SSL *ssl, int *ad, void *arg)
 }
 
 
-#if defined(USE_ALPN)
-static const char alpn_proto_list[] = "\x02h2\x08http/1.1\x08http/1.0";
-static const char *alpn_proto_order_http1[] = {alpn_proto_list + 3,
-                                               alpn_proto_list + 3 + 8,
-                                               NULL};
-#if defined(USE_HTTP2)
-static const char *alpn_proto_order_http2[] = {alpn_proto_list,
-                                               alpn_proto_list + 3,
-                                               alpn_proto_list + 3 + 8,
-                                               NULL};
-#endif
-
-static int
-alpn_select_cb(SSL *ssl,
-               const unsigned char **out,
-               unsigned char *outlen,
-               const unsigned char *in,
-               unsigned int inlen,
-               void *arg)
-{
-	struct mg_domain_context *dom_ctx = (struct mg_domain_context *)arg;
-	unsigned int i, j, enable_http2 = 0;
-	const char **alpn_proto_order = alpn_proto_order_http1;
-
-	struct mg_workerTLS *tls =
-	    (struct mg_workerTLS *)pthread_getspecific(sTlsKey);
-
-	(void)ssl;
-
-	if (tls == NULL) {
-		/* Need to store protocol in Thread Local Storage */
-		/* If there is no Thread Local Storage, don't use ALPN */
-		return SSL_TLSEXT_ERR_NOACK;
-	}
-
-#if defined(USE_HTTP2)
-	enable_http2 = (0 == strcmp(dom_ctx->config[ENABLE_HTTP2], "yes"));
-	if (enable_http2) {
-		alpn_proto_order = alpn_proto_order_http2;
-	}
-#endif
-
-	for (j = 0; alpn_proto_order[j] != NULL; j++) {
-		/* check all accepted protocols in this order */
-		const char *alpn_proto = alpn_proto_order[j];
-		/* search input for matching protocol */
-		for (i = 0; i < inlen; i++) {
-			if (!memcmp(in + i, alpn_proto, (unsigned char)alpn_proto[0])) {
-				*out = in + i + 1;
-				*outlen = in[i];
-				tls->alpn_proto = alpn_proto;
-				return SSL_TLSEXT_ERR_OK;
-			}
-		}
-	}
-
-	/* Nothing found */
-	return SSL_TLSEXT_ERR_NOACK;
-}
-
-
-static int
-next_protos_advertised_cb(SSL *ssl,
-                          const unsigned char **data,
-                          unsigned int *len,
-                          void *arg)
-{
-	struct mg_domain_context *dom_ctx = (struct mg_domain_context *)arg;
-	*data = (const unsigned char *)alpn_proto_list;
-	*len = (unsigned int)strlen((const char *)data);
-
-	(void)ssl;
-	(void)dom_ctx;
-
-	return SSL_TLSEXT_ERR_OK;
-}
-
-
-static int
-init_alpn(struct mg_context *phys_ctx, struct mg_domain_context *dom_ctx)
-{
-	unsigned int alpn_len = (unsigned int)strlen((char *)alpn_proto_list);
-	int ret = SSL_CTX_set_alpn_protos(dom_ctx->ssl_ctx,
-	                                  (const unsigned char *)alpn_proto_list,
-	                                  alpn_len);
-	if (ret != 0) {
-		mg_cry_ctx_internal(phys_ctx,
-		                    "SSL_CTX_set_alpn_protos error: %s",
-		                    ssl_error());
-	}
-
-	SSL_CTX_set_alpn_select_cb(dom_ctx->ssl_ctx,
-	                           alpn_select_cb,
-	                           (void *)dom_ctx);
-
-	SSL_CTX_set_next_protos_advertised_cb(dom_ctx->ssl_ctx,
-	                                      next_protos_advertised_cb,
-	                                      (void *)dom_ctx);
-
-	return ret;
-}
-#endif
-
-
 /* Setup SSL CTX as required by CivetWeb */
 static int
 init_ssl_ctx_impl(struct mg_context *phys_ctx,
@@ -16488,16 +16312,6 @@ init_ssl_ctx_impl(struct mg_context *phys_ctx,
 		 * default */
 		SSL_CTX_set_timeout(dom_ctx->ssl_ctx, (long)ssl_cache_timeout);
 	}
-
-#if defined(USE_ALPN)
-	/* Initialize ALPN only of TLS library (OpenSSL version) supports ALPN */
-#if !defined(NO_SSL_DL)
-	if (!tls_feature_missing[TLS_ALPN])
-#endif
-	{
-		init_alpn(phys_ctx, dom_ctx);
-	}
-#endif
 
 	return 1;
 }
@@ -18277,16 +18091,6 @@ process_new_connection(struct mg_connection *conn)
 		} else {
 			/* HTTP/1 allows protocol upgrade */
 			conn->protocol_type = should_switch_to_protocol(conn);
-
-			if (conn->protocol_type == PROTOCOL_TYPE_HTTP2) {
-				/* This will occur, if a HTTP/1.1 request should be upgraded
-				 * to HTTP/2 - but not if HTTP/2 is negotiated using ALPN.
-				 * Since most (all?) major browsers only support HTTP/2 using
-				 * ALPN, this is hard to test and very low priority.
-				 * Deactivate it (at least for now).
-				 */
-				conn->protocol_type = PROTOCOL_TYPE_HTTP1;
-			}
 		}
 
 		DEBUG_TRACE("http: %s, error: %s",
@@ -18616,9 +18420,6 @@ worker_thread_run(struct mg_connection *conn)
 	 * produce_socket() */
 	while (consume_socket(ctx, &conn->client, thread_index)) {
 
-		/* New connections must start with new protocol negotiation */
-		tls.alpn_proto = NULL;
-
 #if defined(USE_SERVER_STATS)
 		conn->conn_close_time = 0;
 #endif
@@ -18653,19 +18454,6 @@ worker_thread_run(struct mg_connection *conn)
 				}
 
 				/* process HTTPS connection */
-#if defined(USE_HTTP2)
-				if ((tls.alpn_proto != NULL)
-				    && (!memcmp(tls.alpn_proto, "\x02h2", 3))) {
-					/* process HTTPS/2 connection */
-					init_connection(conn);
-					conn->connection_type = CONNECTION_TYPE_REQUEST;
-					conn->protocol_type = PROTOCOL_TYPE_HTTP2;
-					conn->content_len =
-					    -1;               /* content length is not predefined */
-					conn->is_chunked = 0; /* HTTP2 is never chunked */
-					process_new_http2_connection(conn);
-				} else
-#endif
 				{
 					/* process HTTPS/1.x or WEBSOCKET-SECURE connection */
 					init_connection(conn);
