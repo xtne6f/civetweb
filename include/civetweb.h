@@ -143,21 +143,21 @@ struct mg_header {
 
 /* This structure contains information about the HTTP request. */
 struct mg_request_info {
-	const char *request_method;  /* "GET", "POST", etc */
-	const char *request_uri;     /* URL-decoded URI (absolute or relative,
-	                              * as in the request) */
-	const char *local_uri;       /* URL-decoded URI (relative). Can be NULL
-	                              * if the request_uri does not address a
-	                              * resource at the server host. */
+	const char *request_method; /* "GET", "POST", etc */
+	const char *request_uri;    /* URL-decoded URI (absolute or relative,
+	                             * as in the request) */
+	const char *local_uri;      /* URL-decoded URI (relative). Can be NULL
+	                             * if the request_uri does not address a
+	                             * resource at the server host. */
 #if defined(MG_LEGACY_INTERFACE) /* 2017-02-04, deprecated 2014-09-14 */
 	const char *uri;             /* Deprecated: use local_uri instead */
 #endif
-	const char *http_version; /* E.g. "1.0", "1.1" */
-	const char *query_string; /* URL part after '?', not including '?', or
-	                             NULL */
-	const char *remote_user;  /* Authenticated user, or NULL if no auth
-	                             used */
-	char remote_addr[48];     /* Client's IP address as a string. */
+	const char *http_version;   /* E.g. "1.0", "1.1" */
+	const char *query_string;   /* URL part after '?', not including '?', or
+	                               NULL */
+	const char *remote_user;    /* Authenticated user, or NULL if no auth
+	                               used */
+	char remote_addr[48];       /* Client's IP address as a string. */
 
 	long long content_length; /* Length (in bytes) of the request body,
 	                             can be -1 if no length was given. */
@@ -871,6 +871,7 @@ enum {
 	MG_WEBSOCKET_OPCODE_PONG = 0xa
 };
 
+
 /* Macros for enabling compiler-specific checks for printf-like arguments. */
 #undef PRINTF_FORMAT_STRING
 #if defined(_MSC_VER) && _MSC_VER >= 1400
@@ -1098,10 +1099,9 @@ CIVETWEB_API int mg_get_var(const char *data,
      var_name: variable name to decode from the buffer
      dst: destination buffer for the decoded variable
      dst_len: length of the destination buffer
-     occurrence: which occurrence of the variable, 0 is the first, 1 the
-                 second...
-                this makes it possible to parse a query like
-                b=x&a=y&a=z which will have occurrence values b:0, a:0 and a:1
+     occurrence: which occurrence of the variable, 0 is the 1st, 1 the 2nd, ...
+                 this makes it possible to parse a query like
+                 b=x&a=y&a=z which will have occurrence values b:0, a:0 and a:1
 
    Return:
      On success, length of the decoded variable.
@@ -1429,6 +1429,7 @@ mg_connect_client_secure(const struct mg_client_options *client_options,
 enum { TIMEOUT_INFINITE = -1 };
 #endif
 enum { MG_TIMEOUT_INFINITE = -1 };
+
 
 /* Wait for a response from the server
    Parameters:
