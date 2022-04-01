@@ -2,15 +2,10 @@
  *
  * Bufferring for HTTP headers for HTTP response.
  * This function are only intended to be used at the server side.
- * Optional for HTTP/1.0 and HTTP/1.1, mandatory for HTTP/2.
+ * Optional for HTTP/1.0 and HTTP/1.1.
  *
  * This file is part of the CivetWeb project.
  */
-
-#if defined(NO_RESPONSE_BUFFERING) && defined(USE_HTTP2)
-#error "HTTP2 works only if NO_RESPONSE_BUFFERING is not set"
-#endif
-
 
 /* Internal function to free header list */
 static void
@@ -241,11 +236,6 @@ mg_response_header_add_lines(struct mg_connection *conn,
 }
 
 
-#if defined(USE_HTTP2)
-static int http2_send_response_headers(struct mg_connection *conn);
-#endif
-
-
 /* Send http response
  * Parameters:
  *   conn: Current connection handle.
@@ -282,13 +272,6 @@ mg_response_header_send(struct mg_connection *conn)
 	conn->request_state = 2;
 
 #if !defined(NO_RESPONSE_BUFFERING)
-#if defined(USE_HTTP2)
-	if (conn->protocol_type == PROTOCOL_TYPE_HTTP2) {
-		int ret = http2_send_response_headers(conn);
-		return ret ? 0 : 0; /* todo */
-	}
-#endif
-
 	/* Send */
 	send_http1_response_status_line(conn);
 	for (i = 0; i < conn->response_info.num_headers; i++) {
