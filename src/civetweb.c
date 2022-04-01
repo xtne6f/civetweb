@@ -5931,7 +5931,7 @@ static int
 mg_poll(struct mg_pollfd *pfd,
         unsigned int n,
         int milliseconds,
-        const stop_flag_t *stop_flag)
+        stop_flag_t *stop_flag)
 {
 	/* Call poll, but only for a maximum time of a few seconds.
 	 * This will allow to stop the server after some seconds, instead
@@ -5948,7 +5948,7 @@ mg_poll(struct mg_pollfd *pfd,
 	do {
 		int result;
 
-		if (!STOP_FLAG_IS_ZERO(&*stop_flag)) {
+		if (!STOP_FLAG_IS_ZERO(stop_flag)) {
 			/* Shut down signal */
 			return -2;
 		}
