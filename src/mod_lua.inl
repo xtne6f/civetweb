@@ -1672,6 +1672,7 @@ lwebsock_write(lua_State *L)
 }
 
 
+#if defined(USE_TIMERS)
 struct laction_string_arg {
 	lua_State *L;
 	const char *script;
@@ -1783,7 +1784,7 @@ lua_action_funcref_cancel(struct laction_funcref_arg *arg)
 static int
 lwebsocket_set_timer(lua_State *L, int is_periodic)
 {
-#if defined(USE_TIMERS) && defined(USE_WEBSOCKET)
+#if defined(USE_WEBSOCKET)
 	int num_args = lua_gettop(L);
 	struct lua_websock_data *ws;
 	int type1, type2, type3, ok = 0;
@@ -1936,6 +1937,7 @@ lwebsocket_set_interval(lua_State *L)
 {
 	return lwebsocket_set_timer(L, 1);
 }
+#endif /* USE_TIMERS */
 
 
 /* mg.response.send() */
