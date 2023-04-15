@@ -166,14 +166,11 @@ mg_match_alternatives(const char *pat,
 }
 
 
-static int
-match_compare(const void *p1, const void *p2, void *user)
+static int WINCDECL
+match_compare(const void *p1, const void *p2)
 {
 	const struct mg_match_element *e1 = (const struct mg_match_element *)p1;
 	const struct mg_match_element *e2 = (const struct mg_match_element *)p2;
-
-	/* unused */
-	(void)user;
 
 	if (e1->str > e2->str) {
 		return +1;
@@ -209,7 +206,7 @@ mg_match(const char *pat, const char *str, struct mg_match_context *mcx)
 			    (size_t)(&mcx->match[1]) - (size_t)(&mcx->match[0]);
 
 			/* First sort the matches by address ("str" begin to end) */
-			mg_sort(mcx->match, mcx->num_matches, elmsize, match_compare, NULL);
+			qsort(mcx->match, mcx->num_matches, elmsize, match_compare);
 
 			/* Join consecutive matches */
 			i = 1;

@@ -3963,9 +3963,6 @@ header_has_option(const char *header, const char *option)
 }
 
 
-/* Sorting function implemented in a separate file */
-#include "sort.inl"
-
 /* Pattern matching has been reimplemented in a new file */
 #include "match.inl"
 
@@ -9708,52 +9705,31 @@ print_dir_entry(struct mg_connection *conn, struct de *de)
 }
 
 
-/* This function is called from send_directory() and used for
- * sorting directory entries by size, name, or modification time. */
-static int
-compare_dir_entries(const void *p1, const void *p2, void *arg)
+static int WINCDECL
+compare_dir_entry_names(const void *p1, const void *p2)
 {
-	const char *query_string = (const char *)(arg != NULL ? arg : "");
-	if (p1 && p2) {
-		const struct de *a = (const struct de *)p1, *b = (const struct de *)p2;
-		int cmp_result = 0;
+	const struct de *a = (const struct de *)p1, *b = (const struct de *)p2;
+	return (a && b) ? strcmp(a->file_name, b->file_name) : 0;
+}
 
-		if ((query_string == NULL) || (query_string[0] == '\0')) {
-			query_string = "n";
-		}
 
-		/* Sort Directories vs Files */
-		if (a->file.is_directory && !b->file.is_directory) {
-			return -1; /* Always put directories on top */
-		} else if (!a->file.is_directory && b->file.is_directory) {
-			return 1; /* Always put directories on top */
-		}
+static int WINCDECL
+compare_dir_entry_sizes(const void *p1, const void *p2)
+{
+	const struct de *a = (const struct de *)p1, *b = (const struct de *)p2;
+	return (!a || !b || (a->file.size == b->file.size))
+	           ? compare_dir_entry_names(p1, p2)
+	           : ((a->file.size > b->file.size) ? 1 : -1);
+}
 
-		/* Sort by size or date */
-		if (*query_string == 's') {
-			cmp_result = (a->file.size == b->file.size)
-			                 ? 0
-			                 : ((a->file.size > b->file.size) ? 1 : -1);
-		} else if (*query_string == 'd') {
-			cmp_result =
-			    (a->file.last_modified == b->file.last_modified)
-			        ? 0
-			        : ((a->file.last_modified > b->file.last_modified) ? 1
-			                                                           : -1);
-		}
 
-		/* Sort by name:
-		 * if (*query_string == 'n')  ...
-		 * but also sort files of same size/date by name as secondary criterion.
-		 */
-		if (cmp_result == 0) {
-			cmp_result = strcmp(a->file_name, b->file_name);
-		}
-
-		/* For descending order, invert result */
-		return (query_string[1] == 'd') ? -cmp_result : cmp_result;
-	}
-	return 0;
+static int WINCDECL
+compare_dir_entry_dates(const void *p1, const void *p2)
+{
+	const struct de *a = (const struct de *)p1, *b = (const struct de *)p2;
+	return (!a || !b || (a->file.last_modified == b->file.last_modified))
+	           ? compare_dir_entry_names(p1, p2)
+	           : ((a->file.last_modified > b->file.last_modified) ? 1 : -1);
 }
 
 
@@ -10030,11 +10006,49 @@ handle_directory_request(struct mg_connection *conn, const char *dir)
 
 	/* Sort and print directory entries */
 	if (data.entries != NULL) {
-		mg_sort(data.entries,
-		        data.num_entries,
-		        sizeof(data.entries[0]),
-		        compare_dir_entries,
-		        (void *)conn->request_info.query_string);
+		struct de de_swap, *dirs = data.entries, *files;
+		size_t num_dirs = 0, num_files = 0;
+
+		/* Always put directories on top */
+		for (i = 0; i < data.num_entries; i++) {
+			if (dirs[i].file.is_directory) {
+				de_swap = dirs[i];
+				dirs[i] = dirs[num_dirs];
+				dirs[num_dirs++] = de_swap;
+			} else {
+				num_files++;
+			}
+		}
+		files = dirs + num_dirs;
+
+		/* Sort */
+		if ((conn->request_info.query_string != NULL)
+		    && (conn->request_info.query_string[0] == 's')) {
+			qsort(dirs, num_dirs, sizeof(dirs[0]), compare_dir_entry_sizes);
+			qsort(files, num_files, sizeof(files[0]), compare_dir_entry_sizes);
+		} else if ((conn->request_info.query_string != NULL)
+		           && (conn->request_info.query_string[0] == 'd')) {
+			qsort(dirs, num_dirs, sizeof(dirs[0]), compare_dir_entry_dates);
+			qsort(files, num_files, sizeof(files[0]), compare_dir_entry_dates);
+		} else {
+			qsort(dirs, num_dirs, sizeof(dirs[0]), compare_dir_entry_names);
+			qsort(files, num_files, sizeof(files[0]), compare_dir_entry_names);
+		}
+
+		if (sort_direction == 'a') {
+			/* Reverse */
+			for (i = 0; i < num_dirs && i < --num_dirs; i++) {
+				de_swap = dirs[i];
+				dirs[i] = dirs[num_dirs];
+				dirs[num_dirs] = de_swap;
+			}
+			for (i = 0; i < num_files && i < --num_files; i++) {
+				de_swap = files[i];
+				files[i] = files[num_files];
+				files[num_files] = de_swap;
+			}
+		}
+
 		for (i = 0; i < data.num_entries; i++) {
 			print_dir_entry(conn, &data.entries[i]);
 			mg_free(data.entries[i].file_name);
