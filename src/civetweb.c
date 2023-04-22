@@ -15205,9 +15205,10 @@ handle_request(struct mg_connection *conn)
 	if (file.stat.is_directory && ((uri_len = (int)strlen(ri->local_uri)) > 0)
 	    && (ri->local_uri[uri_len - 1] != '/')) {
 
-		/* Path + server root */
-		size_t buflen = UTF8_PATH_MAX * 2 + 2;
+		/* Encoded relative path + / + ? + NUL */
+		size_t buflen = uri_len * 3 + 3;
 		char *new_path;
+		int j;
 
 		if (ri->query_string) {
 			buflen += strlen(ri->query_string);
@@ -15216,8 +15217,20 @@ handle_request(struct mg_connection *conn)
 		if (!new_path) {
 			mg_send_http_error(conn, 500, "out or memory");
 		} else {
-			mg_get_request_link(conn, new_path, buflen - 1);
-			strcat(new_path, "/");
+			mg_url_encode(ri->local_uri, new_path, buflen);
+
+			/* Directory separator should be preserved. */
+			for (i = j = 0; new_path[i]; j++) {
+				if (!strncmp(new_path + i, "%2f", 3)) {
+					new_path[j] = '/';
+					i += 3;
+				} else {
+					new_path[j] = new_path[i++];
+				}
+			}
+			new_path[j++] = '/';
+			new_path[j] = '\0';
+
 			if (ri->query_string) {
 				/* Append ? and query string */
 				strcat(new_path, "?");
