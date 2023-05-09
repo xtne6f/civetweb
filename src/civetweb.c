@@ -1910,8 +1910,6 @@ enum {
 	WEBSOCKET_TIMEOUT,
 	ENABLE_WEBSOCKET_PING_PONG,
 #endif
-	DECODE_URL,
-	DECODE_QUERY_STRING,
 #if defined(USE_LUA)
 	LUA_BACKGROUND_SCRIPT,
 	LUA_BACKGROUND_SCRIPT_PARAMS,
@@ -2054,8 +2052,6 @@ static const struct mg_option config_options[] = {
     {"websocket_timeout_ms", MG_CONFIG_TYPE_NUMBER, NULL},
     {"enable_websocket_ping_pong", MG_CONFIG_TYPE_BOOLEAN, "no"},
 #endif
-    {"decode_url", MG_CONFIG_TYPE_BOOLEAN, "yes"},
-    {"decode_query_string", MG_CONFIG_TYPE_BOOLEAN, "no"},
 #if defined(USE_LUA)
     {"lua_background_script", MG_CONFIG_TYPE_FILE, NULL},
     {"lua_background_script_params", MG_CONFIG_TYPE_STRING_LIST, NULL},
@@ -3983,29 +3979,6 @@ should_keep_alive(const struct mg_connection *conn)
 
 	/* HTTP 1.0 (and earlier) default is to close the connection */
 	return 0;
-}
-
-
-static int
-should_decode_url(const struct mg_connection *conn)
-{
-	if (!conn || !conn->dom_ctx) {
-		return 0;
-	}
-
-	return (mg_strcasecmp(conn->dom_ctx->config[DECODE_URL], "yes") == 0);
-}
-
-
-static int
-should_decode_query_string(const struct mg_connection *conn)
-{
-	if (!conn || !conn->dom_ctx) {
-		return 0;
-	}
-
-	return (mg_strcasecmp(conn->dom_ctx->config[DECODE_QUERY_STRING], "yes")
-	        == 0);
 }
 
 
@@ -14736,20 +14709,9 @@ handle_request(struct mg_connection *conn)
 		}
 		return;
 	}
-	uri_len = (int)strlen(ri->local_uri);
 
-	/* 1.3. decode url (if config says so) */
-	if (should_decode_url(conn)) {
-		url_decode_in_place((char *)ri->local_uri);
-	}
-
-	/* URL decode the query-string only if explicitly set in the configuration
-	 */
-	if (conn->request_info.query_string) {
-		if (should_decode_query_string(conn)) {
-			url_decode_in_place((char *)conn->request_info.query_string);
-		}
-	}
+	/* 1.3. decode url */
+	url_decode_in_place((char *)ri->local_uri);
 
 	/* 1.4. clean URIs, so a path like allowed_dir/../forbidden_file is not
 	 * possible. The fact that we cleaned the URI is stored in that the
@@ -15221,9 +15183,10 @@ handle_request(struct mg_connection *conn)
 	if (file.stat.is_directory && ((uri_len = (int)strlen(ri->local_uri)) > 0)
 	    && (ri->local_uri[uri_len - 1] != '/')) {
 
-		/* Path + server root */
-		size_t buflen = UTF8_PATH_MAX * 2 + 2;
+		/* Encoded relative path + / + ? + NUL */
+		size_t buflen = uri_len * 3 + 3;
 		char *new_path;
+		int j;
 
 		if (ri->query_string) {
 			buflen += strlen(ri->query_string);
@@ -15232,8 +15195,20 @@ handle_request(struct mg_connection *conn)
 		if (!new_path) {
 			mg_send_http_error(conn, 500, "out or memory");
 		} else {
-			mg_get_request_link(conn, new_path, buflen - 1);
-			strcat(new_path, "/");
+			mg_url_encode(ri->local_uri, new_path, buflen);
+
+			/* Directory separator should be preserved. */
+			for (i = j = 0; new_path[i]; j++) {
+				if (!strncmp(new_path + i, "%2f", 3)) {
+					new_path[j] = '/';
+					i += 3;
+				} else {
+					new_path[j] = new_path[i++];
+				}
+			}
+			new_path[j++] = '/';
+			new_path[j] = '\0';
+
 			if (ri->query_string) {
 				/* Append ? and query string */
 				strcat(new_path, "?");
@@ -18236,8 +18211,9 @@ get_uri_type(const char *uri)
 	 * and % encoded symbols.
 	 */
 	for (i = 0; uri[i] != 0; i++) {
-		if (uri[i] < 33) {
-			/* control characters and spaces are invalid */
+		if ((uri[i] < 33) || (uri[i] > 126) || (uri[i] == 34)
+		    || (uri[i] == 60) || (uri[i] == 62) || (uri[i] == 92)) {
+			/* control characters and spaces and "<>\ are invalid */
 			return 0;
 		}
 		/* Allow everything else here (See #894) */
