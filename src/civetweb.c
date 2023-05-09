@@ -18390,8 +18390,9 @@ get_uri_type(const char *uri)
 	 * and % encoded symbols.
 	 */
 	for (i = 0; uri[i] != 0; i++) {
-		if (uri[i] < 33) {
-			/* control characters and spaces are invalid */
+		if ((uri[i] < 33) || (uri[i] > 126) || (uri[i] == 34)
+		    || (uri[i] == 60) || (uri[i] == 62) || (uri[i] == 92)) {
+			/* control characters and spaces and "<>\ are invalid */
 			return 0;
 		}
 		/* Allow everything else here (See #894) */
