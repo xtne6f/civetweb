@@ -2378,8 +2378,8 @@ prepare_lua_response_table(struct mg_connection *conn, lua_State *L)
 static void *
 lua_allocator(void *ud, void *ptr, size_t osize, size_t nsize)
 {
-	(void)osize; /* not used */
 	struct mg_context *ctx = (struct mg_context *)ud;
+	(void)osize; /* not used */
 	if (nsize == 0) {
 		mg_free(ptr);
 		return NULL;

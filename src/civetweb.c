@@ -20575,6 +20575,7 @@ mg_start2(struct mg_init_data *init, struct mg_error_data *error)
 	ctx->lua_bg_log_available = 0;
 	if (ctx->dd.config[LUA_BACKGROUND_SCRIPT] != NULL) {
 		char ebuf[256];
+		lua_State *state;
 		struct vec opt_vec;
 		struct vec eq_vec;
 		const char *sparams;
@@ -20583,7 +20584,7 @@ mg_start2(struct mg_init_data *init, struct mg_error_data *error)
 		pthread_mutex_lock(&ctx->lua_bg_mutex);
 
 		/* Create a Lua state, load all standard libraries and the mg table */
-		lua_State *state = mg_lua_context_script_prepare(
+		state = mg_lua_context_script_prepare(
 		    ctx->dd.config[LUA_BACKGROUND_SCRIPT], ctx, ebuf, sizeof(ebuf));
 		if (!state) {
 			mg_cry_ctx_internal(ctx,
