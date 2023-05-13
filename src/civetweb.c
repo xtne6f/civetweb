@@ -6623,10 +6623,12 @@ mg_read(struct mg_connection *conn, void *buf, size_t len)
 						// ...
 						// chunk-extension= *( ";" chunk-ext-name [ "="
 						// chunk-ext-val ] )
-						do
+						do {
 							++conn->content_len;
-						while (mg_read_inner(conn, lenbuf + i, 1) == 1
-						       && lenbuf[i] != '\r');
+							if (mg_read_inner(conn, lenbuf + i, 1) != 1) {
+								lenbuf[i] = 0;
+							}
+						} while ((lenbuf[i] != 0) && (lenbuf[i] != '\r'));
 					}
 					if ((i > 0) && (lenbuf[i] == '\r')
 					    && (lenbuf[i - 1] != '\r')) {
