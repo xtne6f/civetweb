@@ -200,13 +200,9 @@ mg_match(const char *pat, const char *str, struct mg_match_context *mcx)
 			/* Join "?*" to one pattern. */
 			size_t i, j;
 
-			/* Use difference of two array elements instead of sizeof, since
-			 * there may be some additional padding bytes. */
-			size_t elmsize =
-			    (size_t)(&mcx->match[1]) - (size_t)(&mcx->match[0]);
-
 			/* First sort the matches by address ("str" begin to end) */
-			qsort(mcx->match, mcx->num_matches, elmsize, match_compare);
+			qsort(mcx->match, mcx->num_matches, sizeof(mcx->match[0]),
+			      match_compare);
 
 			/* Join consecutive matches */
 			i = 1;
