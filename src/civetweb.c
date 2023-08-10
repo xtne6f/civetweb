@@ -1108,7 +1108,7 @@ mg_atomic_inc(volatile ptrdiff_t *addr)
 #if defined(_WIN64) && !defined(NO_ATOMICS)
 	ret = InterlockedIncrement64(addr);
 #elif defined(_WIN32) && !defined(NO_ATOMICS)
-	ret = InterlockedIncrement(addr);
+	ret = InterlockedIncrement((volatile LONG *)addr);
 #elif defined(__GNUC__)                                                        \
     && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 0)))           \
     && !defined(NO_ATOMICS)
@@ -1131,7 +1131,7 @@ mg_atomic_dec(volatile ptrdiff_t *addr)
 #if defined(_WIN64) && !defined(NO_ATOMICS)
 	ret = InterlockedDecrement64(addr);
 #elif defined(_WIN32) && !defined(NO_ATOMICS)
-	ret = InterlockedDecrement(addr);
+	ret = InterlockedDecrement((volatile LONG *)addr);
 #elif defined(__GNUC__)                                                        \
     && ((__GNUC__ > 4) || ((__GNUC__ == 4) && (__GNUC_MINOR__ > 0)))           \
     && !defined(NO_ATOMICS)
