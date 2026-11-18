@@ -596,11 +596,6 @@ typedef const char *SOCK_OPT_TYPE;
 #define CRYPTO_LIB "libcrypto-3-x64.dll"
 #endif
 
-#if defined(OPENSSL_API_1_1)
-#define SSL_LIB "libssl-1_1-x64.dll"
-#define CRYPTO_LIB "libcrypto-1_1-x64.dll"
-#endif /* OPENSSL_API_1_1 */
-
 #endif
 #else /* defined(_WIN64) || defined(__MINGW64__) */
 #if !defined(SSL_LIB)
@@ -609,11 +604,6 @@ typedef const char *SOCK_OPT_TYPE;
 #define SSL_LIB "libssl-3.dll"
 #define CRYPTO_LIB "libcrypto-3.dll"
 #endif
-
-#if defined(OPENSSL_API_1_1)
-#define SSL_LIB "libssl-1_1.dll"
-#define CRYPTO_LIB "libcrypto-1_1.dll"
-#endif /* OPENSSL_API_1_1 */
 
 #endif /* SSL_LIB */
 #endif /* defined(_WIN64) || defined(__MINGW64__) */
@@ -888,10 +878,10 @@ typedef unsigned short int in_port_t;
 #define CRYPTO_LIB "libcrypto.dylib"
 #else
 #if !defined(SSL_LIB)
-#define SSL_LIB "libssl.so"
+#define SSL_LIB "libssl.so.3"
 #endif
 #if !defined(CRYPTO_LIB)
-#define CRYPTO_LIB "libcrypto.so"
+#define CRYPTO_LIB "libcrypto.so.3"
 #endif
 #endif
 #if !defined(O_BINARY)
@@ -1535,18 +1525,13 @@ static void mg_snprintf(const struct mg_connection *conn,
 static int mg_init_library_called = 0;
 
 #if !defined(NO_SSL)
-#if defined(OPENSSL_API_1_1) || defined(OPENSSL_API_3_0)
+#if defined(OPENSSL_API_3_0)
 static int mg_openssl_initialized = 0;
 #endif
-#if !defined(OPENSSL_API_1_1) && !defined(OPENSSL_API_3_0)                     \
-    && !defined(USE_MBEDTLS)
+#if !defined(OPENSSL_API_3_0) && !defined(USE_MBEDTLS)
 #error "Please define OPENSSL_API_#_# or USE_MBEDTLS"
 #endif
-#if defined(OPENSSL_API_1_1) && defined(OPENSSL_API_3_0)
-#error "Multiple OPENSSL_API versions defined"
-#endif
-#if (defined(OPENSSL_API_1_1) || defined(OPENSSL_API_3_0))                     \
-    && defined(USE_MBEDTLS)
+#if defined(OPENSSL_API_3_0) && defined(USE_MBEDTLS)
 #error "Multiple SSL libraries defined"
 #endif
 #endif
@@ -1762,13 +1747,7 @@ typedef struct SSL_CTX SSL_CTX;
 #define OPENSSL_API_3_0
 #endif
 #else
-#if (OPENSSL_VERSION_NUMBER >= 0x10100000L)
-#if !defined(OPENSSL_API_1_1)
-#define OPENSSL_API_1_1
-#endif
-#else
 #error "Unsupported OPENSSL_VERSION_NUMBER"
-#endif
 #endif
 
 
@@ -16887,8 +16866,6 @@ static unsigned long
 ssl_get_protocol(int version_id)
 {
 	long unsigned ret = (long unsigned)SSL_OP_ALL;
-	if (version_id > 0)
-		ret |= SSL_OP_NO_SSLv2;
 	if (version_id > 1)
 		ret |= SSL_OP_NO_SSLv3;
 	if (version_id > 2)
@@ -16897,10 +16874,8 @@ ssl_get_protocol(int version_id)
 		ret |= SSL_OP_NO_TLSv1_1;
 	if (version_id > 4)
 		ret |= SSL_OP_NO_TLSv1_2;
-#if defined(SSL_OP_NO_TLSv1_3)
 	if (version_id > 5)
 		ret |= SSL_OP_NO_TLSv1_3;
-#endif
 	return ret;
 }
 
@@ -17132,20 +17107,13 @@ init_ssl_ctx_impl(struct mg_context *phys_ctx,
 	}
 #endif
 
-#if defined(SSL_OP_NO_TLSv1_3)
 	SSL_CTX_clear_options(dom_ctx->ssl_ctx,
-	                      SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1
+	                      SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1
 	                          | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2
 	                          | SSL_OP_NO_TLSv1_3);
-#else
-	SSL_CTX_clear_options(dom_ctx->ssl_ctx,
-	                      SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1
-	                          | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
-#endif
 
 	protocol_ver = atoi(dom_ctx->config[SSL_PROTOCOL_VERSION]);
 	SSL_CTX_set_options(dom_ctx->ssl_ctx, ssl_get_protocol(protocol_ver));
-	SSL_CTX_set_options(dom_ctx->ssl_ctx, SSL_OP_SINGLE_DH_USE);
 	SSL_CTX_set_options(dom_ctx->ssl_ctx, SSL_OP_CIPHER_SERVER_PREFERENCE);
 	SSL_CTX_set_options(dom_ctx->ssl_ctx,
 	                    SSL_OP_NO_SESSION_RESUMPTION_ON_RENEGOTIATION);
@@ -22280,7 +22248,7 @@ mg_init_library(unsigned features)
 	lua_init_optional_libraries();
 #endif
 
-#if (defined(OPENSSL_API_1_1) || defined(OPENSSL_API_3_0)) && !defined(NO_SSL)
+#if defined(OPENSSL_API_3_0) && !defined(NO_SSL)
 
 	if (features_to_init & MG_FEATURES_SSL) {
 		if (!mg_openssl_initialized) {
@@ -22322,7 +22290,7 @@ mg_exit_library(void)
 
 	mg_init_library_called--;
 	if (mg_init_library_called == 0) {
-#if (defined(OPENSSL_API_1_1) || defined(OPENSSL_API_3_0)) && !defined(NO_SSL)
+#if defined(OPENSSL_API_3_0) && !defined(NO_SSL)
 		if (mg_openssl_initialized) {
 			uninitialize_openssl();
 			mg_openssl_initialized = 0;
