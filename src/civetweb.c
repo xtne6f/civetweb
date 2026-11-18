@@ -6707,6 +6707,18 @@ mg_read(struct mg_connection *conn, void *buf, size_t len)
 					break;
 				}
 
+				/* The chunk size comes from the peer. A value that does not
+				 * fit into the rest of the int64_t range either overflows
+				 * content_len or, cast to int64_t, makes it negative, which
+				 * mg_read_inner() takes as "read until the connection is
+				 * closed". Compare as uint64_t: unsigned long may be 32 bit.
+				 * Here content_len == consumed_content >= 0. */
+				if ((uint64_t)chunkSize
+				    > (uint64_t)(INT64_MAX - conn->content_len)) {
+					conn->is_chunked = 2;
+					return -1;
+				}
+
 				/* append a new chunk */
 				conn->content_len += (int64_t)chunkSize;
 			}
@@ -10941,6 +10953,13 @@ parse_http_request(char *buf, int len, struct mg_request_info *ri)
 	ri->num_headers = parse_http_headers(&buf, ri->http_headers);
 	if (ri->num_headers < 0) {
 		/* Error while parsing headers */
+		return -1;
+	}
+	if ((ri->num_headers == (int)MG_MAX_HEADERS) && (*buf != '\r')
+	    && (*buf != '\n') && (*buf != '\0')) {
+		/* More than MG_MAX_HEADERS headers. Do not silently drop the
+		 * rest: a dropped Content-Length or Transfer-Encoding would
+		 * change the request framing. */
 		return -1;
 	}
 
@@ -19312,14 +19331,16 @@ process_new_connection(struct mg_connection *conn)
 		             && ((conn->is_chunked == 4)
 		                 || (!conn->is_chunked
 		                     && ((conn->consumed_content == conn->content_len)
-		                         || ((conn->request_len + conn->content_len)
-		                             <= conn->data_len))))
+		                         || (conn->content_len
+		                             <= (int64_t)(conn->data_len
+		                                          - conn->request_len)))))
 		             && (conn->protocol_type == PROTOCOL_TYPE_HTTP1);
 
 		if (keep_alive) {
 			/* Discard all buffered data for this request */
 			discard_len =
-			    ((conn->request_len + conn->content_len) < conn->data_len)
+			    (conn->content_len
+			     < (int64_t)(conn->data_len - conn->request_len))
 			        ? (int)(conn->request_len + conn->content_len)
 			        : conn->data_len;
 			conn->data_len -= discard_len;
