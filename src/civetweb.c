@@ -2088,7 +2088,13 @@ static const struct mg_option config_options[] = {
     {"protect_uri", MG_CONFIG_TYPE_STRING_LIST, NULL},
     {"authentication_domain", MG_CONFIG_TYPE_STRING, "mydomain.com"},
     {"enable_auth_domain_check", MG_CONFIG_TYPE_BOOLEAN, "yes"},
-    {"ssi_pattern", MG_CONFIG_TYPE_EXT_PATTERN, "**.shtml$|**.shtm$"},
+    {"ssi_pattern",
+     MG_CONFIG_TYPE_EXT_PATTERN,
+#if defined(NO_SSI)
+     ""},
+#else
+     "**.shtml$|**.shtm$"},
+#endif
     {"enable_directory_listing", MG_CONFIG_TYPE_BOOLEAN, "yes"},
     {"enable_webdav", MG_CONFIG_TYPE_BOOLEAN, "no"},
     {"global_auth_file", MG_CONFIG_TYPE_FILE, NULL},
@@ -2126,7 +2132,13 @@ static const struct mg_option config_options[] = {
 #if defined(USE_LUA)
     {"lua_preload_file", MG_CONFIG_TYPE_FILE, NULL},
     {"lua_script_pattern", MG_CONFIG_TYPE_EXT_PATTERN, "**.lua$"},
-    {"lua_server_page_pattern", MG_CONFIG_TYPE_EXT_PATTERN, "**.lp$|**.lsp$"},
+    {"lua_server_page_pattern",
+     MG_CONFIG_TYPE_EXT_PATTERN,
+#if defined(NO_LUA_SERVER_PAGE)
+     ""},
+#else
+     "**.lp$|**.lsp$"},
+#endif
 #if defined(MG_EXPERIMENTAL_INTERFACES)
     {"lua_debug", MG_CONFIG_TYPE_STRING, NULL},
 #endif
@@ -12300,7 +12312,7 @@ delete_file(struct mg_connection *conn, const char *path)
 #endif /* !NO_FILES */
 
 
-#if !defined(NO_FILESYSTEMS)
+#if !defined(NO_SSI) && !defined(NO_FILESYSTEMS)
 static void
 send_ssi_file(struct mg_connection *, const char *, struct mg_file *, int);
 
@@ -12575,7 +12587,7 @@ handle_ssi_file_request(struct mg_connection *conn,
 		(void)mg_fclose(&filep->access); /* Ignore errors for readonly files */
 	}
 }
-#endif /* NO_FILESYSTEMS */
+#endif /* !NO_SSI && !NO_FILESYSTEMS */
 
 
 #if !defined(NO_FILES)
@@ -15322,11 +15334,14 @@ handle_file_based_request(struct mg_connection *conn,
 	if (match_prefix_strlen(conn->dom_ctx->config[LUA_SERVER_PAGE_EXTENSIONS],
 	                        path)
 	    > 0) {
+#if !defined(NO_LUA_SERVER_PAGE)
 		if (is_in_script_path(conn, path)) {
 			/* Lua server page: an SSI like page containing mostly plain
 			 * html code plus some tags with server generated contents. */
 			handle_lsp_request(conn, path, file, NULL);
-		} else {
+		} else
+#endif
+		{
 			/* Script was in an illegal path */
 			mg_send_http_error(conn, 403, "%s", "Forbidden");
 		}
@@ -15385,9 +15400,12 @@ handle_file_based_request(struct mg_connection *conn,
 #endif /* !NO_CGI */
 
 	if (match_prefix_strlen(conn->dom_ctx->config[SSI_EXTENSIONS], path) > 0) {
+#if !defined(NO_SSI)
 		if (is_in_script_path(conn, path)) {
 			handle_ssi_file_request(conn, path, file);
-		} else {
+		} else
+#endif
+		{
 			/* Script was in an illegal path */
 			mg_send_http_error(conn, 403, "%s", "Forbidden");
 		}
