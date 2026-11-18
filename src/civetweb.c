@@ -9747,7 +9747,7 @@ scan_directory(struct mg_connection *conn,
 #endif /* NO_FILESYSTEMS */
 
 
-#if !defined(NO_FILES)
+#if !defined(NO_BUILTIN_PUT_DELETE_METHODS) && !defined(NO_FILES)
 static int
 remove_directory(struct mg_connection *conn, const char *dir)
 {
@@ -11873,7 +11873,7 @@ done:
 #endif /* !NO_CGI */
 
 
-#if !defined(NO_FILES)
+#if !defined(NO_BUILTIN_PUT_DELETE_METHODS) && !defined(NO_FILES)
 static void
 dav_mkcol(struct mg_connection *conn, const char *path)
 {
@@ -12309,7 +12309,7 @@ delete_file(struct mg_connection *conn, const char *path)
 		                   strerror(ERRNO));
 	}
 }
-#endif /* !NO_FILES */
+#endif /* !NO_BUILTIN_PUT_DELETE_METHODS && !NO_FILES */
 
 
 #if !defined(NO_SSI) && !defined(NO_FILESYSTEMS)
@@ -12761,6 +12761,7 @@ handle_propfind(struct mg_connection *conn,
 }
 
 
+#if !defined(NO_BUILTIN_PUT_DELETE_METHODS)
 static void
 dav_lock_file(struct mg_connection *conn, const char *path)
 {
@@ -12956,7 +12957,8 @@ dav_proppatch(struct mg_connection *conn, const char *path)
 	          "Forbidden</d:status></d:propstat>\n");
 	mg_printf(conn, "%s\n", "</d:response></d:multistatus>");
 }
-#endif
+#endif /* !NO_BUILTIN_PUT_DELETE_METHODS */
+#endif /* !NO_FILES */
 
 
 CIVETWEB_API void
@@ -15107,6 +15109,7 @@ handle_request(struct mg_connection *conn)
 	/* 11. Handle put/delete/mkcol requests */
 	if (is_put_or_delete_request) {
 		HTTP1_only;
+#if !defined(NO_BUILTIN_PUT_DELETE_METHODS)
 		/* 11.1. PUT method */
 		if (!strcmp(ri->request_method, "PUT")) {
 			put_file(conn, path);
@@ -15170,8 +15173,9 @@ handle_request(struct mg_connection *conn)
 			            path);
 			return;
 		}
-		/* 11.8. Other methods, e.g.: PATCH
-		 * This method is not supported for static resources,
+#endif /* !NO_BUILTIN_PUT_DELETE_METHODS */
+
+		/* 11.8. This method is not supported for static resources,
 		 * only for scripts (Lua, CGI) and callbacks. */
 		mg_send_http_error(conn,
 		                   405,
