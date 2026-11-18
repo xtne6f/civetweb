@@ -2113,6 +2113,7 @@ lsp_response_send(lua_State *L)
 }
 
 
+#if defined(MG_EXPERIMENTAL_INTERFACES)
 /* Debug hook */
 static void
 lua_debug_hook(lua_State *L, lua_Debug *ar)
@@ -2189,6 +2190,7 @@ lua_debug_hook(lua_State *L, lua_Debug *ar)
 
 	printf("\n");
 }
+#endif /* MG_EXPERIMENTAL_INTERFACES */
 
 
 static const char *LUA_MG_FUNCTIONS =
@@ -2574,7 +2576,9 @@ prepare_lua_environment(struct mg_context *ctx,
                         int lua_env_type)
 {
 	const char *preload_file_name = NULL;
+#if defined(MG_EXPERIMENTAL_INTERFACES)
 	const char *debug_params = NULL;
+#endif
 
 	int lua_context_flags = lua_env_type;
 
@@ -2776,6 +2780,7 @@ prepare_lua_environment(struct mg_context *ctx,
 		}
 	}
 
+#if defined(MG_EXPERIMENTAL_INTERFACES)
 	/* If debugging is enabled, add a hook */
 	if (debug_params) {
 		int mask = 0;
@@ -2790,6 +2795,7 @@ prepare_lua_environment(struct mg_context *ctx,
 		}
 		lua_sethook(L, lua_debug_hook, mask, 0);
 	}
+#endif
 }
 
 
